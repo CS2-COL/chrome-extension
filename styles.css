@@ -1,0 +1,82 @@
+#cs2colContainer {
+    width: 100%;
+    justify-content: center;
+    display: flex;
+    align-items: flex-start;
+    background-color: #12151c;
+    border-radius: 12px;
+}
+
+#cs2colDashboard {
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    row-gap: 20px;
+    padding: 10px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    color: #ebebeb;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#initParsingButton {
+    padding: 6px 12px;
+    background-color: #1FB54A;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background-color 0.3s;
+    display: none;
+}
+
+#initDashboardButton {
+    padding: 6px 12px;
+    background-color: #4caf50;
+    color: #ffffff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background-color 0.3s;
+}
+
+#cs2colDashboardInfo {
+    display: flex;
+    flex-direction: column;
+    row-gap: 15px;
+    background-color: #1e212b;
+    padding: 8px;
+    border-radius: 5px;
+    display: none;
+}
+
+#cs2col-steam-id #current-history-datetime-span {
+    font-size: 0.9em;
+    color: #fdd835;
+}
+
+.cs2col-link {
+    color: #6563ED;
+
+}
+
+#agreementSpan, #saveFileSpan {
+    display: none;
+    color: #959595;
+    font-size: 12px;
+}
+
+.link-button {
+    background: none;
+    border: none;
+    color: #6563ED;
+    cursor: pointer;
+    padding: 0;
+    font: inherit;
+}
