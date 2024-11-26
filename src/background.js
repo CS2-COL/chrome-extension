@@ -67,13 +67,6 @@ async function getCurrentCS2COLUser() {
     }
 }
 
-function encrypt(data, key) {
-    const dataBytes = new TextEncoder().encode(data);
-    const keyBytes = new TextEncoder().encode(key);
-    const encryptedBytes = dataBytes.map( (byte, index) => byte ^ keyBytes[index % keyBytes.length]);
-    return btoa(String.fromCharCode(...encryptedBytes));
-}
-
 async function sendImportedHistory(encryptedData) {
     console.log('sendImportedHistory ...');
     try {

@@ -318,8 +318,16 @@ async function fetchNextPage(time, cursor, retryCount) {
 function encrypt(data, key) {
     const dataBytes = new TextEncoder().encode(data);
     const keyBytes = new TextEncoder().encode(key);
-    const encryptedBytes = dataBytes.map( (byte, index) => byte ^ keyBytes[index % keyBytes.length]);
-    return btoa(String.fromCharCode(...encryptedBytes));
+    const encryptedBytes = dataBytes.map((byte, index) => byte ^ keyBytes[index % keyBytes.length]);
+
+    // Use a loop to convert encryptedBytes to a string instead of using the spread operator
+    // Should fix RangeError: Maximum call stack size exceeded
+    let encryptedString = '';
+    for (let byte of encryptedBytes) {
+        encryptedString += String.fromCharCode(byte);
+    }
+
+    return btoa(encryptedString);
 }
 
 function generateFileName() {
