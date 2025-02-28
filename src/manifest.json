@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "[CS2COL] - Case Opening History Tracker ",
-    "version": "1.0.4",
-    "description": "Extension for uploading your CS2 case opening history to https://caseopening.live",
+    "name": "[CS2COL] - Case Opening Stats Tracker",
+    "version": "1.0.5",
+    "description": "Track your CS2 case stats & find out if you're lucky! Upload your case opening history to caseopening.live, get detailed insights, and share your results with friends.",
     "permissions": [
         "storage"
     ],
