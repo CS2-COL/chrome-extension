@@ -40,29 +40,13 @@ async function getCurrentCS2COLUser() {
             method: 'GET',
             credentials: 'include'
         })
-        .catch(error => {
-            error = `HTTP error during /api/users/me: ${error}`;
-            console.error(error);
-            // chrome.tabs.sendMessage(sender.tab.id, {
-            //     type: 'PASS_ERROR',
-            //     error: error
-            // });
-        });
 
-        if (!response.ok) {
-            console.error(`HTTP error during /api/users/me: ${response.status}`);
-            return false;
-        }
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
 
         const currentUser = await response.json();
         return currentUser;
     } catch (error) {
-        error = `HTTP error during /api/users/me: ${error}`
-        console.error(error)
-        // chrome.tabs.sendMessage(sender.tab.id, {
-        //     type: 'PASS_ERROR',
-        //     error: error
-        // });
+        console.error(`Error fetching user data: ${error}`)
         return false;
     }
 }
@@ -78,29 +62,13 @@ async function sendImportedHistory(encryptedData) {
             credentials: 'include',
             body: encryptedData
         })
-        .catch(error => {
-            error = `HTTP error during /api/import-stats: ${error}`
-            console.error(error)
-            // chrome.tabs.sendMessage(sender.tab.id, {
-            //     type: 'PASS_ERROR',
-            //     error: error
-            // });
-        });
 
-        if (!response.ok) {
-            console.error(`HTTP error during /api/import-stats: ${response.status}`);
-            return false;
-        }
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
 
         const importResult = await response.json();
         return importResult;
     } catch (error) {
-        error = `Error during sendImportedHistory: ${error}`;
-        console.error(error);
-        // chrome.tabs.sendMessage(sender.tab.id, {
-        //     type: 'PASS_ERROR',
-        //     error: error
-        // });
+        console.error(`Error importing history: ${error}`);
         return false;
     }
 }

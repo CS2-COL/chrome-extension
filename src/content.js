@@ -1,19 +1,31 @@
-let lastImportTime = 0;
+let lastImportTime;
+
+let intermediateState;
 
 let g_historyCursor;
 let g_rgDescriptions;
 let g_steamID;
 
 let retryCount = 0;
-const resultItemsArray = [];
+
+let resultItemsArray;
+
+const parser = new DOMParser();
 
 const currentUrl = `https://steamcommunity.com${window.location.pathname}`;
 const currentUrlParams = new URLSearchParams(window.location.search);
 
 if (window.location.pathname.includes('/inventoryhistory') && currentUrlParams.get('l') === 'english' && (currentUrlParams.get('app[]') === '730' || currentUrlParams.get('app[0]') === '730')) {
-    initializelastImportTime();
+    initialize();
     renderDashboard();
 }
+
+// clean up unused key from previous versions
+chrome.storage.local.get('lastImportTime', (result) => {
+    if (result.lastImportTime !== undefined) {
+        chrome.storage.local.remove('lastImportTime');
+    }
+});
 
 async function getValueFromLocalStorage(key) {
     return new Promise((resolve, reject) => {
@@ -31,56 +43,83 @@ async function getValueFromLocalStorage(key) {
     });
 }
 
-async function initializelastImportTime() {
+async function initialize() {
     try {
-        lastImportTime = await getValueFromLocalStorage('lastImportTime');
-        console.log('Last import time:', generateShortDateTime(lastImportTime*1000));
+        intermediateState  = (await getValueFromLocalStorage('intermediateState')) || { cursorTime: 0, cursorS: '', items: [] };
+        resultItemsArray = intermediateState.items || [];
+        console.log('intermediateState: ', intermediateState);
     } catch (error) {
-        console.error('Error retrieving value from local storage:', error);
+        console.error(`Error retrieving value from local storage: ${error}`);
     }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'PASS_CURRENT_CS2COL_USER') {
-        if (message.currentUser) {
+        if (!message.currentUser) {
+            updateStatusBarContent('You are not logged in. Please <a href="https://caseopening.live" class="cs2col-link">log in to caseopening.live</a> and refresh this page to continue.');
+            return;
+        }
+
+        updateElementContent('cs2col-steam-name', message.currentUser.data.steam_name);
+        updateElementContent('cs2col-steam-id', `(${message.currentUser.data.steam_id})`);
+
+        lastImportTime = new Date(message.currentUser.data.last_import_time+'Z').getTime(); // Add 'Z' to force UTC interpretation
+        console.log(`Last import time: ${generateShortDateTime(lastImportTime)}`);
+        updateLastImportDatetime(lastImportTime);
+
+        chrome.storage.local.remove('lastImportTime');
+
+        if (g_steamID != message.currentUser.data.steam_id) {
             updateElementContent('cs2col-steam-name', message.currentUser.data.steam_name);
             updateElementContent('cs2col-steam-id', `(${message.currentUser.data.steam_id})`);
-            updateLastImportDatetime(lastImportTime*1000);
-            if (g_steamID === message.currentUser.data.steam_id) {
-                if ((new Date().getTime()/1000 - lastImportTime) > 12 * 60 * 60) {
-                        if (g_rgDescriptions) {
-                            document.getElementById('initParsingButton').addEventListener('click', () => {
-                                parseCurrentPage();
-                            });
-                            showElementById('initParsingButton');
-                            document.getElementById('agreementSpan').style.display = 'block';
-                        }
-                } else {
-                    updateStatusBarContent('Temporarily you can only import stats once in 12 hours. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>');
-                }
-            } else {
-                updateElementContent('cs2col-steam-name', message.currentUser.data.steam_name);
-                updateElementContent('cs2col-steam-id', `(${message.currentUser.data.steam_id})`);
-                updateStatusBarContent('Please log in again to <a href="https://caseopening.live" class="cs2col-link">https://caseopening.live</a> and refresh this page.');
+            updateStatusBarContent(`Your Steam account does not match the CS2COL user currently logged in. Please <a href="https://caseopening.live" class="cs2col-link">log in again</a> with the correct account and refresh this page.`);
+            return;
+        }
+
+        if ((new Date().getTime() - lastImportTime) < 12 * 60 * 60 * 1000) {
+            updateStatusBarContent('You can only import stats once every 12 hours. Please try again later. If you continue to experience issues, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.');
+            return;
+        }
+
+        if (intermediateState.cursorTime === 0 || intermediateState.cursorS === '') {
+            if (g_rgDescriptions) {
+                document.getElementById('initParsingButton').addEventListener('click', () => {
+                    parseCurrentPage();
+                });
             }
         } else {
-            updateStatusBarContent('Unauthenticated user. Please log in to <a href="https://caseopening.live" class="cs2col-link">https://caseopening.live</a> and refresh this page.');
+            document.getElementById('initParsingButton').addEventListener('click', () => {
+                fetchNextPage(intermediateState.cursorTime, intermediateState.cursorS, retryCount);
+            });
+            updateStatusBarContent(`Your last history collection attempt failed, but your progress was saved locally. Click "Collect History Stats" to resume from where you left off.`);
         }
+
+        showElementById('initParsingButton');
+        document.getElementById('agreementSpan').style.display = 'block';
+        
     } else if (message.type === 'PASS_ERROR') {
         console.error(message.error);
-        updateStatusBarContent(`Something went wrong at background. Try again later. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+        updateStatusBarContent(`An unexpected background error occurred. Please try again later. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
     } else if (message.type === 'IMPORT_RESULT') {
         if (message.importResult) {
-            chrome.storage.local.set({ lastImportTime: new Date().getTime()/1000 }, function() {
-                console.log('Last import time saved successfully.');
+            intermediateState = {
+                cursorTime: 0,
+                cursorS: '',
+                items: []
+            }
+            chrome.storage.local.set({ 
+                intermediateState: intermediateState
+            }, function() {
+                console.log('intermediateState saved.');
             });
             if (resultItemsArray.length > 0) {
                 updateStatusBarContent(`History stats (${resultItemsArray.length} items) were collected and uploaded. Check it out at <a href="https://caseopening.live/profiles/${g_steamID}" class="cs2col-link">https://caseopening.live/profile/${g_steamID}</a>`);
+                hideElementById('saveFileSpan');
             } else {
-                updateStatusBarContent(`No new items were detected since last import. It's time to open some new cases. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+                updateStatusBarContent(`No new history stats were found since your last import. Try opening more cases! If you believe this is an error, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
             }
         } else {
-            updateStatusBarContent(`Something went wrong during stats import. Try again later. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+            updateStatusBarContent(`An error occurred while importing your stats. Please try again later. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
         }
     }
 });
@@ -90,25 +129,9 @@ document.addEventListener('LOAD_LOCAL_VARIABLES', function(e) {
     g_rgDescriptions = e.detail.g_rgDescriptions;
     g_steamID = e.detail.g_steamID;
     if (!g_rgDescriptions) {
-        updateStatusBarContent(`No items descriptions were found on the page. Try again later. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+        updateStatusBarContent(`No item descriptions were detected on this page. Please refresh and try again. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
     }
 });
-
-async function parseCurrentPage() {
-    if (g_rgDescriptions) {
-        const firstPageHistoryRowsHTML = document.getElementById('inventory_history_table').innerHTML;
-        parseHTML(firstPageHistoryRowsHTML, g_rgDescriptions);
-        if (g_historyCursor) {
-            hideElementById('initParsingButton');
-            hideElementById('agreementSpan');
-            updateCurrentHistoryDatetime(g_historyCursor.time);
-            await fetchNextPage(g_historyCursor.time, g_historyCursor.s, retryCount);
-        }
-        hideElementById('initDashboardButton');
-    } else {
-        updateStatusBarContent(`Something went wrong during current page parsing. Try again later. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
-    }
-}
 
 function renderDashboard() {
     // Fetch the HTML for the injected button and container from `dashboard.html`
@@ -122,7 +145,7 @@ function renderDashboard() {
             const dashboardWrapper = document.createElement('div');
             dashboardWrapper.innerHTML = html;
 
-            // Insert the container after the `profile_small_header_bg` div
+            // Insert the container after the `inventory_history_pagingrow` div
             anchorDiv.insertAdjacentElement('beforebegin', dashboardWrapper);
 
             const script = document.createElement('script');
@@ -141,7 +164,23 @@ function renderDashboard() {
             });
         }
     })
-    .catch(error => console.error('Failed to load dashboard.html:', error));
+    .catch(error => console.error(`Failed to load dashboard.html: ${error}`));
+}
+
+async function parseCurrentPage() {
+    if (g_rgDescriptions) {
+        const firstPageHistoryRowsHTML = document.getElementById('inventory_history_table').innerHTML;
+        parseHTML(firstPageHistoryRowsHTML, g_rgDescriptions);
+        if (g_historyCursor) {
+            hideElementById('initParsingButton');
+            hideElementById('agreementSpan');
+            updateCurrentHistoryDatetime(g_historyCursor.time);
+            await fetchNextPage(g_historyCursor.time, g_historyCursor.s, retryCount);
+        }
+        hideElementById('initDashboardButton');
+    } else {
+        updateStatusBarContent(`An error occurred while analyzing this page. Please refresh and try again. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
+    }
 }
 
 function hideElementById(id) {
@@ -162,7 +201,7 @@ function updateStatusBarContent(content) {
 }
 
 function updateCurrentHistoryDatetime(epochTimestamp) {
-    updateStatusBarContent('Please wait. Collecting items around ' + generateShortDateTime(epochTimestamp*1000)+ ' ...');
+    updateStatusBarContent(`Fetching history data from around ${generateShortDateTime(epochTimestamp * 1000)}. Please wait...`);
 }
 
 function updateLastImportDatetime(epochTimestamp) {
@@ -175,7 +214,6 @@ function updateLastImportDatetime(epochTimestamp) {
 
 function parseHTML(rawHTML, jsonDescription) {
     // Parsing HTML string to a DOM object for easier querying
-    const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(rawHTML, 'text/html');
 
     // Select all trade history rows
@@ -194,16 +232,22 @@ function parseHTML(rawHTML, jsonDescription) {
         let datetime = row.querySelector('.tradehistory_date')?.textContent.replace(/\t+/g, ' ').trim();
         datetime = datetime.replace(/(\d)([ap]m)/i, '$1 $2').toUpperCase();
         // Convert date and time (local) to a timestamp (UTC)
-        const unlockedAtTimestamp = new Date(datetime).getTime() / 1000;
+        const unlockedAtTimestamp = new Date(datetime).getTime();
         if (lastImportTime < unlockedAtTimestamp) {
             // Find all tradehistory_items_withimages divs within tradehistory_content
             const itemGroups = row.querySelectorAll('.tradehistory_content .tradehistory_items.tradehistory_items_withimages');
 
-            // If there are multiple tradehistory_items_withimages, get only the last one
-            const lastItemGroup = itemGroups[itemGroups.length - 1];
+            let item = null;
 
-            // Get the item element (either <a> or <span>) from the last item group
-            const item = lastItemGroup.querySelector('.tradehistory_items_group a, .tradehistory_items_group span');
+            // Iterate over the item groups to find the one with "+"
+            for (const itemGroup of itemGroups) {
+                const plusMinus = itemGroup.querySelector('.tradehistory_items_plusminus');
+                if (plusMinus && plusMinus.textContent.trim() === '+') {
+                    // Get the item element (either <a> or <span>)
+                    item = itemGroup.querySelector('.tradehistory_items_group a, .tradehistory_items_group span');
+                    break;
+                }
+            }
 
             if (item) {
                 const classId = item.getAttribute('data-classid');
@@ -218,7 +262,7 @@ function parseHTML(rawHTML, jsonDescription) {
                             name: itemDetails.name,
                             // name: itemDetails.market_hash_name,
                             exterior: null,
-                            unlocked_at: unlockedAtTimestamp
+                            unlocked_at: unlockedAtTimestamp/1000
                         };
                         itemDetails.tags.forEach(tag => {
                             switch (tag.category) {
@@ -249,23 +293,39 @@ async function fetchNextPage(time, cursor, retryCount) {
 
         if (response.status === 429) {
             retryCount++;
-            console.warn('Rate limit hit. Retrying after 20 seconds ...');
-            updateStatusBarContent(`Rate limit hit! Retrying after 20 seconds. Attempt ${retryCount}/10.`);
+            console.warn(`Rate limit hit. Retrying in 20 seconds... (Attempt ${retryCount}/10)`);
+            updateStatusBarContent(`Steam has temporarily blocked further requests due to high traffic. Retrying in 20 seconds... (Attempt ${retryCount}/10)`);
             if (retryCount < 10) {
                 setTimeout(() => fetchNextPage(time, cursor, retryCount), 20000);
                 return;
             }
-            updateStatusBarContent(`Too many requests. Please try again in a couple of hours. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+            intermediateState = {
+                cursorTime: time,
+                cursorS: cursor,
+                items: resultItemsArray
+            }
+            chrome.storage.local.set({ intermediateState: intermediateState }, function() {
+                console.log('intermediateState saved.');
+            });
+            updateStatusBarContent(`Steam has blocked further requests due to API rate limits. Your history stats have been saved locally. Please try again in a few hours. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
             return;
         } else if (response.status != 200) {
             retryCount++;
-            console.warn(`Steam API error returned ${response.status}. Retrying after 20 seconds ...`);
-            updateStatusBarContent(`Steam API error returned ${response.status}. Retrying after 20 seconds. Attempt ${retryCount}/10.`);
+            console.warn(`Steam returned an error (Code: ${response.status}). Retrying in 20 seconds... (Attempt ${retryCount}/10)`);
+            updateStatusBarContent(`Steam returned an error (Code: ${response.status}). Retrying in 20 seconds... (Attempt ${retryCount}/10)`);
             if (retryCount < 10) {
                 setTimeout(() => fetchNextPage(time, cursor, retryCount), 20000);
                 return;
             }
-            updateStatusBarContent(`Steam API is down. Please try again in a couple of hours. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+            intermediateState = {
+                cursorTime: time,
+                cursorS: cursor,
+                items: resultItemsArray
+            }
+            chrome.storage.local.set({ intermediateState: intermediateState }, function() {
+                console.log('intermediateState saved.');
+            });
+            updateStatusBarContent(`Steam's API is currently unavailable. Your history stats have been saved locally. Please try again in a few hours. If the issue persists, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
             return; 
         }
 
@@ -288,7 +348,7 @@ async function fetchNextPage(time, cursor, retryCount) {
 
         // If there are no more items to fetch
         console.log('No new items.');
-        updateStatusBarContent('All new items collected.');
+        updateStatusBarContent('Success! All available history stats have been collected.');
         
         var payload = {
             'sId': g_steamID,
@@ -301,17 +361,16 @@ async function fetchNextPage(time, cursor, retryCount) {
             saveFileButton.addEventListener('click', () => {
                 saveFile(JSON.stringify(payload), generateFileName());
             });
-            // showElementById('saveFileButton');
             document.getElementById('saveFileSpan').style.display = 'block';
             const encryptedData = encrypt(JSON.stringify(payload), g_steamID);
 
             // Send the collected data to the background script
             chrome.runtime.sendMessage({ type: 'SEND_IMPORTED_HISTORY', data: encryptedData });
         } else {
-            updateStatusBarContent(`No new items were detected since last import. It's time to open some new cases. In case of continuous errors please contact us at <a href="https://caseopening.live/support" class="cs2col-link">https://caseopening.live/support</a>`);
+            updateStatusBarContent(`No new history stats were found since your last import. Try opening more cases! If you believe this is an error, <a href="https://caseopening.live/support" class="cs2col-link">contact support</a>.`);
         }
     } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error(`Error fetching data: ${error}`);
     }
 }
 
