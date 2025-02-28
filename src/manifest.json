@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "[CS2COL] - Case Opening Stats Tracker",
     "version": "1.0.5",
-    "description": "Track your CS2 case stats & find out if you're lucky! Upload your case opening history to caseopening.live, get detailed insights, and share your results with friends.",
+    "description": "Track your CS2 case stats & find out if you're lucky! Upload your case opening history to caseopening.live, view insights, and share results.",
     "permissions": [
         "storage"
     ],
