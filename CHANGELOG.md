@@ -17,3 +17,7 @@ All notable changes to this project will be documented in this file.
 - Improve status bar messages.
 ### Fixed
 - The extension occasionally captured the container instead of the item. Fixed by relying on the "+" text instead of the node index.
+
+## [1.0.5] (2025-02-28)
+### Changed
+- SEO optimization.
