@@ -21,3 +21,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.5] (2025-02-28)
 ### Changed
 - SEO optimization.
+
+## [1.0.6] (2025-04-11)
+### Changed
+- Content script matches to only run on inventory history pages.
