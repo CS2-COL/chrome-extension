@@ -25,3 +25,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.6] (2025-04-11)
 ### Changed
 - Content script matches to only run on inventory history pages.
+
+## [1.0.6.1] (2025-04-20)
+### Fixed
+- Change host to the production in the build.
