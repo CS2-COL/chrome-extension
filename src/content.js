@@ -63,7 +63,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         updateElementContent('cs2col-steam-name', message.currentUser.data.steam_name);
         updateElementContent('cs2col-steam-id', `(${message.currentUser.data.steam_id})`);
 
-        lastImportTime = new Date(message.currentUser.data.last_import_time+'Z').getTime(); // Add 'Z' to force UTC interpretation
+        if (message.currentUser.data.last_import_time === null) {
+            lastImportTime = new Date('1970-01-01T00:00:00Z');
+        } else {
+            lastImportTime = new Date(message.currentUser.data.last_import_time+'Z').getTime(); // Add 'Z' to force UTC interpretation
+        }
+
         console.log(`Last import time: ${generateShortDateTime(lastImportTime)}`);
         updateLastImportDatetime(lastImportTime);
 

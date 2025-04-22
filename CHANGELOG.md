@@ -29,3 +29,7 @@ All notable changes to this project will be documented in this file.
 ## [1.0.6.1] (2025-04-20)
 ### Fixed
 - Change host to the production in the build.
+
+## [1.0.7] (2025-04-22)
+### Fixed
+- The extension didn’t work for new users due to incorrect validation of the last import time.
